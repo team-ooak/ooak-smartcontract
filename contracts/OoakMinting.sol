@@ -9,7 +9,7 @@ import "./token/KIP17/KIP17Token.sol";
 contract OoakMinting is Ownable {
     // twitch ID to public address
     mapping(string => address) IdToAddress;
-
+    // TODO : 여러 개의 NFT를 가지도록
     mapping(address => uint256) AddressToTokenId;
     // NFT TokenId to NameTag
     mapping(uint256 => string) TokenIdToNameTag;
@@ -21,6 +21,7 @@ contract OoakMinting is Ownable {
     mapping(string => bool) isNameTagExist; 
 
     uint256 public lastTokenId;
+    uint256 constant firstPreSaleLimit = 1000;
     address NftContract;
 
     constructor() public {
@@ -30,6 +31,7 @@ contract OoakMinting is Ownable {
     function registerNameTag(string memory twitchId, address publicKey, string memory nameTag) onlyOwner public {
         require(bytes(getNameTag(twitchId)).length == 0, "already register nameTag");
         require(!isNameTagExist[nameTag], "this nameTag already exist");
+        require(lastTokenId < firstPreSaleLimit, "The first presale is sold out");
 
         lastTokenId++;
 
