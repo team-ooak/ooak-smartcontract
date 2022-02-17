@@ -87,10 +87,11 @@ contract OoakMinting is Ownable {
     //     for (uint i=0; i<_tokenIds.length; i++) _tokenURIs[i] = TokenIdToTokenURI[_tokenIds[i]];
     //     return _tokenURIs;
     // }
-    function getTokenByIndex(string memory twitchId, uint256 index) public view returns (uint256) {
+    function getTokenURIByIndex(string memory twitchId, uint256 index) public view returns (string memory) {
         require(IdToAddress[twitchId] != address(0), "address do not exist");
         address _address = IdToAddress[twitchId];
-        return AddressToTokenIds[_address][index];
+        uint256 _tokenId = AddressToTokenIds[_address][index];
+        return TokenIdToTokenURI[_tokenId];
     }
     //Token 개수 가져오기
     function getTokenNumber(string memory twitchId) public view returns (uint256) { 
