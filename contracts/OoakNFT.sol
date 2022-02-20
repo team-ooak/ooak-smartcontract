@@ -4,6 +4,7 @@ pragma solidity ^0.5.0;
 
 import "./token/KIP17/KIP17Token.sol";
 import "./OoakMinting.sol";
+import "./ownership/Ownable.sol";
 
 contract OoakNFT is KIP17Token("OoakNFT","OOAK"), Ownable {
     address OoakContract;
