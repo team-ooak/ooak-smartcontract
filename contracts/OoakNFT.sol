@@ -15,6 +15,6 @@ contract OoakNFT is KIP17Token("OoakNFT","OOAK"), Ownable {
 
     function safeTransferFrom(address from, address to, uint256 tokenId) public {
         super.safeTransferFrom(from, to, tokenId);
-        OoakMinting(OoakContract).changeOwnerOfNameTag(from, to, tokenId);
+        OoakMinting(OoakContract).changeOwnerOfToken(from, to, tokenId);
     }
 }
