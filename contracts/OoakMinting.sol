@@ -2,152 +2,148 @@
 
 pragma solidity ^0.5.0;
 
-
 import "./ownership/Ownable.sol";
-
 import "./token/KIP17/KIP17Token.sol";
+import "./OoakNFT.sol";
+import "./OoakDataInterface.sol";
+import "./OoakData.sol";
 
-contract OoakMinting is Ownable {
 
-    uint256 public lastTokenId;
-    uint256 constant firstPreSaleLimit = 1000;
-    address NftContract;
+contract OoakMinting is Ownable, OoakDataInterface {
 
-    struct TwitchUser {
-        string TwitchId;        // Users' Twitch ID (user & streamer)
-        address PublicAddress;  // Wallet Public Address
-        // My Token IDs ([One Wallet --> Many Tokens])
-        uint256[] RawTokenIds;     // Token IDs not minted yet
-        uint256[] MintedTokenIds;  // Minted Token IDs  
+    uint256 constant firstPreSaleLimit = 960;
+    uint256 constant airDropEventLimit = 1000;
+    OoakNFT NftContract;
+    OoakData DataContract;
+
+    function setNFTContract(address nftContract) onlyOwner public {
+        NftContract = OoakNFT(nftContract);
     }
 
-    struct OoakToken {
-        uint256 TokenId;        // Token ID
-        string NameTag;         // Token NameTag
-        string TokenURI;        // Token URI for NFT
-        bool isMinted;          // True if Minted, used to find nametag from user efficiently (ex. changeOwnerOfToken)
+    function setDataContract(address dataContract) onlyOwner public {
+        DataContract = OoakData(dataContract);
     }
 
-    mapping(string => TwitchUser) IdToUser;         // Twitch ID to User struct
-    mapping(address => TwitchUser) AddressToUser;   // Public Address to User struct
-    mapping(uint256 => OoakToken) TokenIdToToken;        // (Token ID from Users' MyTokenIds) --> (OoakToken struct)
-    mapping(string => bool) IsNameTagExist;         // True if Name Tag is already used
+    function registerNameTagForFirstPreSale(string memory twitchId, string memory nameTag) public {
+        require(!DataContract.getIsNameTagExist(nameTag), "this nameTag already exist");
+        require(DataContract.getLastTokenId() < firstPreSaleLimit, "The first presale is sold out");
 
+        DataContract.incLastTokenId();
+        uint256 lastTokenId = DataContract.getLastTokenId();
 
-    constructor() public {
-        lastTokenId = 0;
+        // 유저가 존재하지 않을 때 생성해야 한다
+        if (DataContract.getAddress(twitchId) == address(0x0)) {
+            uint256[] memory _rawList;
+            uint256[] memory _mintedList;
+            DataContract.setIdToUser(twitchId, msg.sender, _rawList, _mintedList);
+            DataContract.setAddressToId(msg.sender, twitchId);
+        }
+        
+        DataContract.pushRawTokenId(twitchId, lastTokenId);
+        DataContract.setTokenIdToToken(lastTokenId, nameTag, "", false);
+        DataContract.setIsNameTagExist(nameTag, true);
     }
 
-    function registerNameTag(string memory twitchId, address publicKey, string memory nameTag) onlyOwner public {
-        //require(bytes(getNameTag(twitchId)).length == 0, "already register nameTag");
-        require(!IsNameTagExist[nameTag], "this nameTag already exist");
-        require(lastTokenId < firstPreSaleLimit, "The first presale is sold out");
+    function registerNameTagByOwner(string memory twitchId, address publicAddress, string memory nameTag) public onlyOwner {
+        require(!DataContract.getIsNameTagExist(nameTag), "this nameTag already exist");
+        require(DataContract.getLastTokenId() < airDropEventLimit, "airdrop Event end");
 
-        lastTokenId++;
+        DataContract.incLastTokenId();
+        uint256 lastTokenId = DataContract.getLastTokenId();
 
+        // 유저가 존재하지 않을 때 생성해야 한다
+        if (DataContract.getAddress(twitchId) == address(0x0)) {
+            uint256[] memory _rawList;
+            uint256[] memory _mintedList;
+            DataContract.setIdToUser(twitchId, publicAddress, _rawList, _mintedList);
+            DataContract.setAddressToId(publicAddress, twitchId);
+        }
+        
+        DataContract.pushRawTokenId(twitchId, lastTokenId);
+        DataContract.setTokenIdToToken(lastTokenId, nameTag, "", false);
+        DataContract.setIsNameTagExist(nameTag, true);
+    }
+
+    // 민팅 기회를 놓치고 추후 네임 태그를 NFT로 거래해 사려는 사람의 경우 먼저 User를 만들고 거래해야 한다
+    function createUser(string memory twitchId) public {
+        require(bytes(DataContract.getId(msg.sender)).length == 0, "you are already user");
         uint256[] memory _rawList;
         uint256[] memory _mintedList;
 
-        if(IdToUser[twitchId].RawTokenIds.length==0 && IdToUser[twitchId].MintedTokenIds.length==0) {   // When User with the Twitch ID does not exist : create new user
-            TwitchUser memory newUser = TwitchUser(twitchId, publicKey, _rawList, _mintedList);
-            IdToUser[twitchId] = newUser;
-            AddressToUser[publicKey] = newUser;
-        }
+        DataContract.setIdToUser(twitchId, msg.sender, _rawList, _mintedList);
+        DataContract.setAddressToId(msg.sender, twitchId);
+    } 
+
+    // nameTag가 없다면 "" 반환
+    function getNameTag(string memory twitchId) public view returns (string memory) {
+        if(DataContract.getMintedTokenListLength(twitchId) == 0) return "";
+        uint256 tokenId = DataContract.getMintedTokenIdByIndex(twitchId, 0);
+        return DataContract.getTokenNameTag(tokenId);
+    }
+
+    // nameTag가 없다면 "" 반환
+    function getNameTagURI(string memory twitchId) public view returns (string memory) {
+        if(DataContract.getMintedTokenListLength(twitchId) == 0) return "";
+        uint256 tokenId = DataContract.getMintedTokenIdByIndex(twitchId, 0);
+        return DataContract.getTokenURI(tokenId);
+    }
+
+    function setTokenIdFirst(string memory twitchId, uint256 index) public {
+        require(msg.sender == DataContract.getAddress(twitchId), "sender's address must be same with twtichId's address");
+        require(DataContract.getMintedTokenListLength(twitchId) != 0, "This TwitchId doesn't have any NameTag");
         
-        IdToUser[twitchId].RawTokenIds.push(lastTokenId);       // Push new TokenId to not-minted array
-
-        OoakToken memory newToken = OoakToken(lastTokenId, nameTag, "", false);    // Create new Token with empty URI
-        TokenIdToToken[lastTokenId] = newToken;
-
-        IsNameTagExist[nameTag] = true;
-    }
-
-    function getAddress(string memory twitchId) public view returns (address) {
-        return IdToUser[twitchId].PublicAddress;
-    }
-
-    function getRawTokenNumber(string memory twitchId) public view returns (uint256) { 
-        //require(IdToUser[twitchId], "address do not exist");
-        return IdToUser[twitchId].RawTokenIds.length;
+        DataContract.swapMintedTokenIdInList(twitchId, 0, index);
     }
     
-    function getRawTokenIds(string memory twitchId) public view returns (uint256[] memory) { 
-        //require(IdToUser[twitchId], "address do not exist");
-        return IdToUser[twitchId].RawTokenIds;
-    }
-
-    function getMintedTokenNumber(string memory twitchId) public view returns (uint256) { 
-        //require(IdToUser[twitchId], "address do not exist");
-        return IdToUser[twitchId].MintedTokenIds.length;
-    }
-
-    function getMintedTokenIds(string memory twitchId) public view returns (uint256[] memory) { 
-        //require(IdToUser[twitchId], "address do not exist");
-        return IdToUser[twitchId].MintedTokenIds;
-    }
-
-    function getNameTagWithTokenId(uint256 tokenId) public view returns (string memory) {
-        //require(TokenIdToToken[tokenId], "token do not exist");
-        return(TokenIdToToken[tokenId].NameTag);
-    }
-
-    function getTokenURIWithTokenId(uint256 tokenId) public view returns (string memory) {
-        //require(TokenIdToToken[tokenId], "token do not exist");
-        return(TokenIdToToken[tokenId].TokenURI);
-    }
-
-    // get 기능
-    // get all Nametags(tokens) of user
-    // get all NFTs of user
-    
-
+    // WARNING : rawTokenIds의 마지막 tokenId를 이용해 민팅한다
     function mintNFTWithTokenURI(string memory twitchId, string memory tokenURI) onlyOwner public {
-        //require(IdToUser[twitchId], "address do not exist");
-        require(getRawTokenNumber(twitchId) != 0, "No empty TokenId left to Mint");
-        address publicKey = getAddress(twitchId);
-        uint256[] memory tokenIds = getRawTokenIds(twitchId);
-        uint256 tokenId = tokenIds[tokenIds.length-1];
+        require(DataContract.getAddress(twitchId) != address(0x0), "address do not exist");
+        require(DataContract.getRawTokenListLength(twitchId) != 0, "empty TokenId left to Mint");
+
+        uint256 tokenId = DataContract.popRawTokenId(twitchId);
 
         //가스비를 아끼기 위해 rawtokenIds 중 마지막 tokenId 이용
-        KIP17Token(NftContract).mintWithTokenURI(publicKey, tokenId, tokenURI);
-        IdToUser[twitchId].MintedTokenIds.push(tokenId);            // mintedtokenIds 배열에 추가
-        TokenIdToToken[tokenId].TokenURI = tokenURI;                // token struct의 tokenURI에 URI 추가
-        TokenIdToToken[tokenId].isMinted = true;                    // isMinted = true
-        delete IdToUser[twitchId].RawTokenIds[tokenIds.length-1];   // rawtokenIds 배열에서 삭제
-        IdToUser[twitchId].RawTokenIds.length--;
-    }
+        address publicAddress = DataContract.getAddress(twitchId);
+        KIP17Token(NftContract).mintWithTokenURI(publicAddress, tokenId, tokenURI);
+        DataContract.pushMintedTokenId(twitchId, tokenId);
 
-    function setNFTContract(address nftContract) onlyOwner public {
-        NftContract = nftContract;
+        string memory nameTag = DataContract.getTokenNameTag(tokenId);
+        DataContract.setTokenIdToToken(tokenId, nameTag, tokenURI, true);
     }
-    
     
     function changeOwnerOfToken(address srcAddress, address dstAddress, uint256 tokenId) public {
-        require(msg.sender == NftContract, "sender does not match NFTcontract");
-        //require(AddressToUser[srcAddress], "source address user do not exist");
-        //require(AddressToUser[dstAddress], "destination address user do not exist");
-        //require(TokenIdToToken[tokenId], "TokenID does not exist");
+        require(msg.sender == address(NftContract), "sender does not match NFTcontract");
+        require(bytes(DataContract.getId(dstAddress)).length != 0, "dstAddress is not user");
 
-        if (TokenIdToToken[tokenId].isMinted == true) {
-            for (uint256 i=0; i<AddressToUser[srcAddress].MintedTokenIds.length; i++) {
-                if (AddressToUser[srcAddress].MintedTokenIds[i] == tokenId){
-                    delete AddressToUser[srcAddress].MintedTokenIds[i];
-                    AddressToUser[srcAddress].MintedTokenIds[i] = AddressToUser[srcAddress].MintedTokenIds[AddressToUser[srcAddress].MintedTokenIds.length - 1];    // Swap last item to deleted space
-                    AddressToUser[srcAddress].MintedTokenIds.length--;
-                    AddressToUser[dstAddress].MintedTokenIds.push(tokenId);
-                    break;
-                }
-            }
-        } else {
-            for (uint256 i=0; i<AddressToUser[srcAddress].RawTokenIds.length; i++) {
-                if (AddressToUser[srcAddress].RawTokenIds[i] == tokenId){
-                    delete AddressToUser[srcAddress].RawTokenIds[i];
-                    AddressToUser[srcAddress].RawTokenIds[i] = AddressToUser[srcAddress].RawTokenIds[AddressToUser[srcAddress].RawTokenIds.length - 1];    // Swap last item to deleted space
-                    AddressToUser[srcAddress].RawTokenIds.length--;
-                    AddressToUser[dstAddress].RawTokenIds.push(tokenId);
-                    break;
-                }
+        string memory srcTwitchId = DataContract.getId(srcAddress);
+        string memory dstTwitchId = DataContract.getId(dstAddress);
+
+        uint256 mintedListLength = DataContract.getMintedTokenListLength(srcTwitchId);
+        for (uint256 i=0; i < mintedListLength; i++) {
+            if (DataContract.getMintedTokenIdByIndex(srcTwitchId, i) == tokenId){
+                DataContract.swapMintedTokenIdInList(srcTwitchId, i, mintedListLength - 1);
+                DataContract.popMintedTokenId(srcTwitchId);
+                DataContract.pushMintedTokenId(dstTwitchId, tokenId);
+                break;
             }
         }
+    }
+
+    function getMintedTokenIdList(string memory twitchId) public view returns (uint256[] memory ) {
+        uint256 length = DataContract.getMintedTokenListLength(twitchId);
+        uint256[] memory list = new uint256[](length);
+        for (uint256 i=0; i < length; i++) {
+            list[i] = (DataContract.getMintedTokenIdByIndex(twitchId, i));
+        }
+        return list;
+    }
+
+    function getRawMintedTokenIdList(string memory twitchId) public view returns (uint256[] memory) {
+        uint256 length = DataContract.getRawTokenListLength(twitchId);
+        uint256[] memory list = new uint256[](length);
+        for (uint256 i=0; i < length; i++) {
+            list[i] = (DataContract.getMintedTokenIdByIndex(twitchId, i));
+        }
+        return list;
     }
 }
