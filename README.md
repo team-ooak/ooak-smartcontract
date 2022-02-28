@@ -1,4 +1,4 @@
-# report for LikeLion Hackathon
+# Report for LikeLion Hackathon
 https://likelion.notion.site/OOAK-NFT-9964e1482a7a4604bf1b51be84194286
 
 # klaytn-contracts
