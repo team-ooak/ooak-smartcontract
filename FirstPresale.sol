@@ -33,11 +33,11 @@ contract FirstPresale is Ownable {
 
 
 
-    function nftReceiptMint(string memory _nickname) public  {
+    function nftReceiptMint(string memory _nickname) external payable  {
         require(saleState == true);
         require(wl.isWhitelist(msg.sender));
         require(presaleLimit > nowNum);
-        // require(msg.value == mintPrice);
+        require(msg.value == mintPrice);
 
         string memory tokenURI = "https://gateway.pinata.cloud/ipfs/QmWi7pw84v4u1ZsZSDyLBmovzafdvCvWkU2wECXxTo9tJL";//test용 uri
         nickname.putIn(nowNum, _nickname);
@@ -45,7 +45,6 @@ contract FirstPresale is Ownable {
         buyer.putIn(msg.sender);
 
         nowNum = nowNum.add(1);
-        
     }
 
     function nftIdTagMint(uint256 _to, uint256 _from) public onlyOwner {
